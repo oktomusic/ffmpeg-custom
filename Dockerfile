@@ -24,6 +24,9 @@ RUN xx-info env
 # Install build dependencies
 # ---------------------------
 RUN apk add --no-cache \
+    clang \
+    lld \
+    llvm-dev \
     build-base \
     pkgconfig \
     yasm \
@@ -32,11 +35,16 @@ RUN apk add --no-cache \
     curl \
     tar \
     xz \
-    zlib-dev \
-    libogg-dev \
     autoconf \
     automake \
     libtool
+
+RUN xx-apk add --no-cache \
+    clang \
+    lld \
+    llvm-dev \
+    zlib-dev \
+    libogg-dev
 
 WORKDIR /usr/local/src
 
@@ -47,9 +55,9 @@ ENV OPUS_VERSION=1.5.2
 RUN curl -LO https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opus-${OPUS_VERSION}.tar.gz \
     && tar -xzf opus-${OPUS_VERSION}.tar.gz \
     && rm opus-${OPUS_VERSION}.tar.gz
- 
+
 WORKDIR /usr/local/src/opus-${OPUS_VERSION}
-RUN ./configure --disable-shared --enable-static --prefix=/usr/local \
+RUN ./configure --with-cc=xx-clang --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=/usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -61,9 +69,9 @@ ENV FLAC_VERSION=1.5.0
 RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac-${FLAC_VERSION}.tar.xz \
     && tar -xJf flac-${FLAC_VERSION}.tar.xz \
     && rm flac-${FLAC_VERSION}.tar.xz
- 
+
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
-RUN ./configure --disable-shared --enable-static --prefix=/usr/local \
+RUN ./configure --with-cc=xx-clang --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=/usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -77,9 +85,9 @@ RUN curl -LO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
     && rm ffmpeg-${FFMPEG_VERSION}.tar.xz
 
 WORKDIR /usr/local/src/ffmpeg-${FFMPEG_VERSION}
- 
+
 # Configure FFmpeg static build
-RUN PKG_CONFIG_ALL_STATIC=1 LDFLAGS="-static" ./configure \
+RUN PKG_CONFIG_ALL_STATIC=1 LDFLAGS="-static" ./configure --with-cc=xx-clang --host=$(xx-clang --print-target-triple) \
     --disable-everything \
     # Build configuration
     --disable-shared \
@@ -121,17 +129,20 @@ RUN PKG_CONFIG_ALL_STATIC=1 LDFLAGS="-static" ./configure \
     --enable-swresample \
     --disable-swscale \
     --disable-x86asm
- 
+
 RUN make -j$(nproc) && make install && make clean
- 
+
+RUN xx-verify --static /usr/local/bin/ffmpeg
+RUN xx-verify --static /usr/local/bin/ffprobe
+
 # ---------------------------
 # Create minimal runtime image
 # ---------------------------
 FROM alpine:3.22 AS runtime
- 
+
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
- 
+
 RUN /usr/local/bin/ffmpeg -codecs | grep -E "flac|opus"
- 
+
 ENTRYPOINT ["/usr/local/bin/ffmpeg"]
