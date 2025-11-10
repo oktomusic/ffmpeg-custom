@@ -57,7 +57,7 @@ RUN curl -LO https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opu
     && rm opus-${OPUS_VERSION}.tar.gz
 
 WORKDIR /usr/local/src/opus-${OPUS_VERSION}
-RUN ./configure --with-cc=xx-clang --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=/usr/local \
+RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -71,7 +71,7 @@ RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac
     && rm flac-${FLAC_VERSION}.tar.xz
 
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
-RUN ./configure --with-cc=xx-clang --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=/usr/local \
+RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -87,7 +87,10 @@ RUN curl -LO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
 WORKDIR /usr/local/src/ffmpeg-${FFMPEG_VERSION}
 
 # Configure FFmpeg static build
-RUN PKG_CONFIG_ALL_STATIC=1 LDFLAGS="-static" ./configure --with-cc=xx-clang --host=$(xx-clang --print-target-triple) \
+RUN export PKG_CONFIG="pkg-config --static" && \
+    export PKG_CONFIG_PATH=$(xx-info sysroot)usr/local/lib/pkgconfig && \
+    export PKG_CONFIG_LIBDIR=$(xx-info sysroot)usr/local/lib/pkgconfig && \
+    CC=xx-clang CXX=xx-clang++ LDFLAGS="-static" ./configure --prefix=/usr/local --arch=$(xx-info arch) --target-os=linux \
     --disable-everything \
     # Build configuration
     --disable-shared \
