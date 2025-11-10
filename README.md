@@ -8,7 +8,7 @@ Availlable as a Docker image for the `linux/amd64` and the `linux/arm64` archite
 ghcr.io/oktomusic/ffmpeg-custom:latest
 ```
 
-Provides the following binaries:
+Provides the following static binaries:
 
 ```
 /usr/local/bin/ffmpeg
