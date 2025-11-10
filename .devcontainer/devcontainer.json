@@ -1,0 +1,20 @@
+{
+  "name": "Oktomusic Custom FFmpeg",
+  "image": "mcr.microsoft.com/devcontainers/base:noble",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": false,
+      "installDockerComposeSwitch": false
+    }
+  },
+  "forwardPorts": [],
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
+    },
+    "vscode": {}
+  }
+}

@@ -1,0 +1,123 @@
+---
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      use_cache:
+        description: "Use build cache"
+        required: true
+        type: boolean
+        default: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_OKTOMUSIC_FFMPEG: ${{ github.repository }}
+  IMAGE_LABELS: |
+    org.opencontainers.image.title=Oktomusic Custom FFmpeg
+    org.opencontainers.image.description=Custom build of FFmpeg for Oktomusic project
+    org.opencontainers.image.authors=AFCMS <afcm.contact@gmail.com>
+    org.opencontainers.image.licenses=LGPL-2.1-only
+    org.opencontainers.image.source=https://github.com/oktomusic/ffmpeg-custom
+    io.artifacthub.package.readme-url=https://raw.githubusercontent.com/oktomusic/ffmpeg-custom/refs/heads/master/README.md
+    io.artifacthub.package.category=skip-prediction
+    io.artifacthub.package.keywords=music,media,tool
+    io.artifacthub.package.license=LGPL-2.1-only
+    io.artifacthub.package.maintainers=[{"name":"AFCMS","email":"afcm.contact@gmail.com"}]
+
+jobs:
+  docker:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}
+          labels: ${{ env.IMAGE_LABELS }}
+          annotations: ${{ env.IMAGE_LABELS }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}:buildcache,mode=max
+          build-args: |
+            USE_CACHE=${{ github.event.inputs.use_cache || 'true' }}
+      
+      # Build and push Docker image with Buildx (don't push on PR)
+      # https://github.com/docker/build-push-action
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache: ${{ (github.event_name == 'workflow_dispatch' && !inputs.use_cache) || startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Attest Build Provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          push-to-registry: false
+
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Check cosign installation
+        if: github.event_name != 'pull_request'
+        run: cosign version
+
+      - name: Sign the images with GitHub OIDC Token
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
