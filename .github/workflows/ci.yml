@@ -96,7 +96,6 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
@@ -176,7 +175,12 @@ jobs:
           # Capture the digest of the primary tag (first tag in metadata) for signing
           primary_tag=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           echo "Primary tag: ${primary_tag}"
-          manifest_digest=$(docker buildx imagetools inspect "${primary_tag}" --format '{{json .Descriptor.Digest}}' | jq -r '.')
+          # Extract manifest digest by parsing standard output (first 'Digest:' line)
+          manifest_digest=$(docker buildx imagetools inspect "${primary_tag}" | awk 'tolower($1)=="digest:" {print $2; exit}')
+          if [ -z "${manifest_digest}" ]; then
+            echo "Failed to extract manifest digest for ${primary_tag}" >&2
+            exit 1
+          fi
           echo "Manifest digest: ${manifest_digest}"
           echo "digest=${manifest_digest}" >> "$GITHUB_OUTPUT"
 
