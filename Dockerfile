@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
-FROM alpine:3.22 AS builder
+FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS builder
 
 LABEL org.opencontainers.image.title="Oktomusic Custom FFmpeg"
 LABEL org.opencontainers.image.description="Custom build of FFmpeg for Oktomusic project"
@@ -13,6 +15,10 @@ LABEL io.artifacthub.package.category="skip-prediction"
 LABEL io.artifacthub.package.keywords="music,media,tool"
 LABEL io.artifacthub.package.license="LGPL-2.1-only"
 LABEL io.artifacthub.package.maintainers='[{"name":"AFCMS","email":"afcm.contact@gmail.com"}]'
+
+COPY --from=xx / /
+ARG TARGETPLATFORM
+RUN xx-info env
 
 # ---------------------------
 # Install build dependencies
