@@ -20,7 +20,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_OKTOMUSIC_FFMPEG: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
   IMAGE_LABELS: |
     org.opencontainers.image.title=Oktomusic Custom FFmpeg
     org.opencontainers.image.description=Custom build of FFmpeg for Oktomusic project
@@ -34,15 +35,33 @@ env:
     io.artifacthub.package.maintainers=[{"name":"AFCMS","email":"afcm.contact@gmail.com"}]
 
 jobs:
-  docker:
-    name: Build and push Docker image
-    runs-on: ubuntu-latest
+  build:
+    name: Build
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     permissions:
       contents: read
       packages: write
       id-token: write
       attestations: write
     steps:
+      - name: Prepare
+        id: prep
+        run: |
+          platform=${{ matrix.platform }}
+          platform_pair=${platform//\//-}
+          image_name_lowercase=${IMAGE_NAME,,}
+          echo "PLATFORM_PAIR=${platform_pair}" >> $GITHUB_ENV
+          echo "IMAGE_NAME_LOWERCASE=${image_name_lowercase}" >> $GITHUB_ENV
+          # expose as step outputs for expression context usage
+          echo "platform_pair=${platform_pair}" >> $GITHUB_OUTPUT
+          echo "image_name_lowercase=${image_name_lowercase}" >> $GITHUB_OUTPUT
+
       - name: Checkout repository
         uses: actions/checkout@v5
 
@@ -54,34 +73,43 @@ jobs:
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v3
 
-      # Login against a Docker registry except on PR
-      # https://github.com/docker/login-action
-      - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3.4.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: ${{ env.IMAGE_LABELS }}
           annotations: ${{ env.IMAGE_LABELS }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
+        id: build
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}:latest
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}:buildcache,mode=max
+          tags: ${{ env.REGISTRY }}/${{ steps.prep.outputs.image_name_lowercase }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           build-args: |
             USE_CACHE=${{ github.event.inputs.use_cache || 'true' }}
+
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: digests-${{ steps.prep.outputs.platform_pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
@@ -103,9 +131,66 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v3
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_OKTOMUSIC_FFMPEG }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
           push-to-registry: false
+
+  merge:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    needs:
+      - build
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v6
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          labels: ${{ env.IMAGE_LABELS }}
+          annotations: ${{ env.IMAGE_LABELS }}
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        id: manifest
+        run: |
+          set -euo pipefail
+          echo "Creating multi-arch manifest list"
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+          # Capture the digest of the primary tag (first tag in metadata) for signing
+          primary_tag=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          echo "Primary tag: ${primary_tag}"
+          manifest_digest=$(docker buildx imagetools inspect "${primary_tag}" --format '{{json .Descriptor.Digest}}' | jq -r '.')
+          echo "Manifest digest: ${manifest_digest}"
+          echo "digest=${manifest_digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
@@ -118,7 +203,7 @@ jobs:
       - name: Sign the images with GitHub OIDC Token
         if: github.event_name != 'pull_request'
         env:
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           images=""
