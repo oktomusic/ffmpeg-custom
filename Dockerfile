@@ -72,13 +72,15 @@ RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac
     && rm flac-${FLAC_VERSION}.tar.xz
 
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
-RUN CC=xx-clang LDFLAGS="-static" ./configure \
+RUN CC=xx-clang ./configure \
     --host=$(xx-clang --print-target-triple) \
     --disable-shared \
     --enable-static \
     --prefix=$(xx-info sysroot)usr/local \
-    && make -j$(nproc) \
-    && make install
+    LDFLAGS="-static" \
+    && make -j$(nproc) AM_LDFLAGS="-all-static" \
+    && make install \
+    && cp src/metaflac/metaflac /usr/local/bin/metaflac
 
 # ---------------------------
 # Build FFmpeg statically with Opus and FLAC support
@@ -161,5 +163,6 @@ FROM alpine:3.22 AS runtime
 
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
+COPY --from=builder /usr/local/bin/metaflac /usr/local/bin/metaflac
 
 ENTRYPOINT ["/usr/local/bin/ffmpeg"]
