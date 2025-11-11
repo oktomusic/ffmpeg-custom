@@ -93,6 +93,7 @@ RUN xx-clang --setup-target-triple && \
     export PKG_CONFIG_LIBDIR=$(xx-info sysroot)usr/local/lib/pkgconfig && \
     ./configure \
     --prefix=/usr/local \
+    --extra-version=oktomusic \
     --enable-cross-compile \
     --cross-prefix=$(xx-clang --print-target-triple)- \
     --arch=$(xx-info arch) \
