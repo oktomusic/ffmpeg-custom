@@ -79,7 +79,7 @@ RUN CC=xx-clang LDFLAGS="-static" ./configure \
     --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install \
-    && cp $(xx-info sysroot)usr/local/bin/metaflac /usr/local/bin/metaflac
+    && cp src/metaflac/metaflac /usr/local/bin/metaflac
 
 # ---------------------------
 # Build FFmpeg statically with Opus and FLAC support
