@@ -78,7 +78,8 @@ RUN CC=xx-clang LDFLAGS="-static" ./configure \
     --enable-static \
     --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
-    && make install
+    && make install \
+    && cp $(xx-info sysroot)usr/local/bin/metaflac /usr/local/bin/metaflac
 
 # ---------------------------
 # Build FFmpeg statically with Opus and FLAC support
@@ -161,5 +162,6 @@ FROM alpine:3.22 AS runtime
 
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
+COPY --from=builder /usr/local/bin/metaflac /usr/local/bin/metaflac
 
 ENTRYPOINT ["/usr/local/bin/ffmpeg"]
