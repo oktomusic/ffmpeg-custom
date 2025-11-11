@@ -13,4 +13,5 @@ Provides the following static binaries:
 ```
 /usr/local/bin/ffmpeg
 /usr/local/bin/ffprobe
+/usr/local/bin/metaflac
 ```
