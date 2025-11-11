@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
-FROM alpine:3.22 AS builder
+FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS builder
 
 LABEL org.opencontainers.image.title="Oktomusic Custom FFmpeg"
 LABEL org.opencontainers.image.description="Custom build of FFmpeg for Oktomusic project"
@@ -14,10 +16,15 @@ LABEL io.artifacthub.package.keywords="music,media,tool"
 LABEL io.artifacthub.package.license="LGPL-2.1-only"
 LABEL io.artifacthub.package.maintainers='[{"name":"AFCMS","email":"afcm.contact@gmail.com"}]'
 
+COPY --from=xx / /
+
 # ---------------------------
 # Install build dependencies
 # ---------------------------
 RUN apk add --no-cache \
+    clang \
+    lld \
+    llvm-dev \
     build-base \
     pkgconfig \
     yasm \
@@ -26,11 +33,19 @@ RUN apk add --no-cache \
     curl \
     tar \
     xz \
-    zlib-dev \
-    libogg-dev \
     autoconf \
     automake \
     libtool
+
+ARG TARGETPLATFORM
+RUN xx-info env
+
+RUN xx-apk add --no-cache \
+    musl-dev \
+    gcc \
+    g++ \
+    zlib-dev \
+    libogg-dev
 
 WORKDIR /usr/local/src
 
@@ -41,9 +56,9 @@ ENV OPUS_VERSION=1.5.2
 RUN curl -LO https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opus-${OPUS_VERSION}.tar.gz \
     && tar -xzf opus-${OPUS_VERSION}.tar.gz \
     && rm opus-${OPUS_VERSION}.tar.gz
- 
+
 WORKDIR /usr/local/src/opus-${OPUS_VERSION}
-RUN ./configure --disable-shared --enable-static --prefix=/usr/local \
+RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -55,9 +70,9 @@ ENV FLAC_VERSION=1.5.0
 RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac-${FLAC_VERSION}.tar.xz \
     && tar -xJf flac-${FLAC_VERSION}.tar.xz \
     && rm flac-${FLAC_VERSION}.tar.xz
- 
+
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
-RUN ./configure --disable-shared --enable-static --prefix=/usr/local \
+RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -71,14 +86,27 @@ RUN curl -LO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
     && rm ffmpeg-${FFMPEG_VERSION}.tar.xz
 
 WORKDIR /usr/local/src/ffmpeg-${FFMPEG_VERSION}
- 
+
 # Configure FFmpeg static build
-RUN PKG_CONFIG_ALL_STATIC=1 LDFLAGS="-static" ./configure \
+RUN xx-clang --setup-target-triple && \
+    export PKG_CONFIG_PATH=$(xx-info sysroot)usr/local/lib/pkgconfig && \
+    export PKG_CONFIG_LIBDIR=$(xx-info sysroot)usr/local/lib/pkgconfig && \
+    ./configure \
+    --prefix=/usr/local \
+    --extra-version=oktomusic \
+    --enable-cross-compile \
+    --cross-prefix=$(xx-clang --print-target-triple)- \
+    --arch=$(xx-info arch) \
+    --target-os=linux \
+    --cc=xx-clang \
+    --cxx=xx-clang++ \
+    --pkg-config-flags="--static" \
+    --extra-cflags="-static" \
+    --extra-ldflags="-static" \
     --disable-everything \
     # Build configuration
     --disable-shared \
     --enable-static \
-    --pkg-config-flags="--static" \
     --disable-doc \
     --disable-debug \
     # Tools
@@ -115,17 +143,18 @@ RUN PKG_CONFIG_ALL_STATIC=1 LDFLAGS="-static" ./configure \
     --enable-swresample \
     --disable-swscale \
     --disable-x86asm
- 
+
 RUN make -j$(nproc) && make install && make clean
- 
+
+RUN xx-verify --static /usr/local/bin/ffmpeg
+RUN xx-verify --static /usr/local/bin/ffprobe
+
 # ---------------------------
 # Create minimal runtime image
 # ---------------------------
 FROM alpine:3.22 AS runtime
- 
+
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
- 
-RUN /usr/local/bin/ffmpeg -codecs | grep -E "flac|opus"
- 
+
 ENTRYPOINT ["/usr/local/bin/ffmpeg"]

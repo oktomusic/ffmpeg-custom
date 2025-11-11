@@ -8,8 +8,6 @@ on:
     tags:
       - "v*"
   pull_request:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       use_cache:
@@ -36,41 +34,23 @@ env:
 
 jobs:
   build:
-    name: Build
-    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+    name: Build multi-arch image
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
       attestations: write
     steps:
-      - name: Prepare
-        id: prep
-        run: |
-          platform=${{ matrix.platform }}
-          platform_pair=${platform//\//-}
-          image_name_lowercase=${IMAGE_NAME,,}
-          echo "PLATFORM_PAIR=${platform_pair}" >> $GITHUB_ENV
-          echo "IMAGE_NAME_LOWERCASE=${image_name_lowercase}" >> $GITHUB_ENV
-          # expose as step outputs for expression context usage
-          echo "platform_pair=${platform_pair}" >> $GITHUB_OUTPUT
-          echo "image_name_lowercase=${image_name_lowercase}" >> $GITHUB_OUTPUT
-
       - name: Checkout repository
         uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: all
+          platforms: linux/amd64,linux/arm64
 
-      - name: Setup Docker buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log into registry ${{ env.REGISTRY }}
@@ -90,33 +70,20 @@ jobs:
           annotations: ${{ env.IMAGE_LABELS }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         id: build
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           build-args: |
             USE_CACHE=${{ github.event.inputs.use_cache || 'true' }}
-
-      - name: Export digest
-        if: github.event_name != 'pull_request'
-        run: |
-          mkdir -p ${{ runner.temp }}/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
-
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
-        with:
-          name: digests-${{ steps.prep.outputs.platform_pair }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
 
       - name: Attest Build Provenance
         if: github.event_name != 'pull_request'
@@ -126,80 +93,14 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: false
 
-  merge:
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
-    needs:
-      - build
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v6
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-*
-          merge-multiple: true
-
-      # Login against a Docker registry except on PR
-      # https://github.com/docker/login-action
-      - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3.4.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          labels: ${{ env.IMAGE_LABELS }}
-          annotations: ${{ env.IMAGE_LABELS }}
-
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        id: manifest
-        run: |
-          set -euo pipefail
-          echo "Creating multi-arch manifest list"
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
-          # Capture the digest of the primary tag (first tag in metadata) for signing
-          primary_tag=$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
-          echo "Primary tag: ${primary_tag}"
-          # Extract manifest digest by parsing standard output (first 'Digest:' line)
-          manifest_digest=$(docker buildx imagetools inspect "${primary_tag}" | awk 'tolower($1)=="digest:" {print $2; exit}')
-          if [ -z "${manifest_digest}" ]; then
-            echo "Failed to extract manifest digest for ${primary_tag}" >&2
-            exit 1
-          fi
-          echo "Manifest digest: ${manifest_digest}"
-          echo "digest=${manifest_digest}" >> "$GITHUB_OUTPUT"
-
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
-
       - name: Install cosign
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3
 
-      - name: Check cosign installation
-        if: github.event_name != 'pull_request'
-        run: cosign version
-
       - name: Sign the images with GitHub OIDC Token
         if: github.event_name != 'pull_request'
         env:
-          DIGEST: ${{ steps.manifest.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           images=""
