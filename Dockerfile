@@ -72,7 +72,11 @@ RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac
     && rm flac-${FLAC_VERSION}.tar.xz
 
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
-RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=$(xx-info sysroot)usr/local \
+RUN CC=xx-clang LDFLAGS="-static" ./configure \
+    --host=$(xx-clang --print-target-triple) \
+    --disable-shared \
+    --enable-static \
+    --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -148,6 +152,7 @@ RUN make -j$(nproc) && make install && make clean
 
 RUN xx-verify --static /usr/local/bin/ffmpeg
 RUN xx-verify --static /usr/local/bin/ffprobe
+RUN xx-verify --static /usr/local/bin/metaflac
 
 # ---------------------------
 # Create minimal runtime image
