@@ -17,8 +17,6 @@ LABEL io.artifacthub.package.license="LGPL-2.1-only"
 LABEL io.artifacthub.package.maintainers='[{"name":"AFCMS","email":"afcm.contact@gmail.com"}]'
 
 COPY --from=xx / /
-ARG TARGETPLATFORM
-RUN xx-info env
 
 # ---------------------------
 # Install build dependencies
@@ -39,10 +37,13 @@ RUN apk add --no-cache \
     automake \
     libtool
 
+ARG TARGETPLATFORM
+RUN xx-info env
+
 RUN xx-apk add --no-cache \
-    clang \
-    lld \
-    llvm-dev \
+    musl-dev \
+    gcc \
+    g++ \
     zlib-dev \
     libogg-dev
 
@@ -87,15 +88,24 @@ RUN curl -LO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
 WORKDIR /usr/local/src/ffmpeg-${FFMPEG_VERSION}
 
 # Configure FFmpeg static build
-RUN export PKG_CONFIG="pkg-config --static" && \
+RUN xx-clang --setup-target-triple && \
     export PKG_CONFIG_PATH=$(xx-info sysroot)usr/local/lib/pkgconfig && \
     export PKG_CONFIG_LIBDIR=$(xx-info sysroot)usr/local/lib/pkgconfig && \
-    CC=xx-clang CXX=xx-clang++ LDFLAGS="-static" ./configure --prefix=/usr/local --arch=$(xx-info arch) --target-os=linux \
+    ./configure \
+    --prefix=/usr/local \
+    --enable-cross-compile \
+    --cross-prefix=$(xx-clang --print-target-triple)- \
+    --arch=$(xx-info arch) \
+    --target-os=linux \
+    --cc=xx-clang \
+    --cxx=xx-clang++ \
+    --pkg-config-flags="--static" \
+    --extra-cflags="-static" \
+    --extra-ldflags="-static" \
     --disable-everything \
     # Build configuration
     --disable-shared \
     --enable-static \
-    --pkg-config-flags="--static" \
     --disable-doc \
     --disable-debug \
     # Tools
