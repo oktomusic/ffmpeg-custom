@@ -72,12 +72,13 @@ RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac
     && rm flac-${FLAC_VERSION}.tar.xz
 
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
-RUN CC=xx-clang LDFLAGS="-static" ./configure \
+RUN CC=xx-clang ./configure \
     --host=$(xx-clang --print-target-triple) \
     --disable-shared \
     --enable-static \
     --prefix=$(xx-info sysroot)usr/local \
-    && make -j$(nproc) \
+    LDFLAGS="-static" \
+    && make -j$(nproc) AM_LDFLAGS="-all-static" \
     && make install \
     && cp src/metaflac/metaflac /usr/local/bin/metaflac
 
