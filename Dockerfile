@@ -3,7 +3,7 @@
 
 FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
 
-FROM --platform=$BUILDPLATFORM alpine:3.22 AS builder
+FROM --platform=$BUILDPLATFORM alpine:3.23 AS builder
 
 LABEL org.opencontainers.image.title="Oktomusic Custom FFmpeg"
 LABEL org.opencontainers.image.description="Custom build of FFmpeg for Oktomusic project"
@@ -159,7 +159,7 @@ RUN xx-verify --static /usr/local/bin/metaflac
 # ---------------------------
 # Create minimal runtime image
 # ---------------------------
-FROM alpine:3.22 AS runtime
+FROM alpine:3.23 AS runtime
 
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
