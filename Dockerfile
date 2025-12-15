@@ -86,7 +86,7 @@ RUN CC=xx-clang ./configure \
 # Build FFmpeg statically with Opus and FLAC support
 # ---------------------------
 WORKDIR /usr/local/src
-ENV FFMPEG_VERSION=8.0
+ENV FFMPEG_VERSION=8.0.1
 RUN curl -LO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
     && tar -xJf ffmpeg-${FFMPEG_VERSION}.tar.xz \
     && rm ffmpeg-${FFMPEG_VERSION}.tar.xz
