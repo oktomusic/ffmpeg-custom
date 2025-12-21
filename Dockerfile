@@ -21,7 +21,14 @@ COPY --from=xx / /
 # ---------------------------
 # Install build dependencies
 # ---------------------------
-RUN apk add --no-cache \
+# Workaround for Alpine 3.23 TLS certificate issues
+# Use busybox wget to download and install ca-certificates without cert verification
+RUN busybox wget -O /tmp/ca-cert.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/ca-certificates-20241010-r0.apk --no-check-certificate && \
+    busybox wget -O /tmp/ca-bundle.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/ca-certificates-bundle-20241010-r0.apk --no-check-certificate && \
+    apk add --allow-untrusted /tmp/ca-cert.apk /tmp/ca-bundle.apk && \
+    rm /tmp/ca-cert.apk /tmp/ca-bundle.apk && \
+    apk update && \
+    apk add --no-cache \
     clang \
     lld \
     llvm-dev \
