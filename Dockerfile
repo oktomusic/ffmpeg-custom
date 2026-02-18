@@ -1,6 +1,13 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
+# We have to ignore some dockerfile-utils errors, because `--unpack` is currently unsupported for the `ADD` instruction
+# - https://github.com/microsoft/vscode-containers/issues/297
+# - https://github.com/rcjsuen/dockerfile-utils/issues/131
+# 
+# When updating tarball versions, update the checksums as well:
+# - curl -fsSL TARBALL_URL | sha256sum
+
 FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
 
 FROM --platform=$BUILDPLATFORM alpine:3.22 AS builder
@@ -30,9 +37,6 @@ RUN apk add --no-cache \
     yasm \
     nasm \
     bash \
-    curl \
-    tar \
-    xz \
     autoconf \
     automake \
     libtool
@@ -53,12 +57,18 @@ WORKDIR /usr/local/src
 # Build Opus statically from official tarball
 # ---------------------------
 ENV OPUS_VERSION=1.5.2
-RUN curl -LO https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opus-${OPUS_VERSION}.tar.gz \
-    && tar -xzf opus-${OPUS_VERSION}.tar.gz \
-    && rm opus-${OPUS_VERSION}.tar.gz
-
+ENV OPUS_CHECKSUM=sha256:65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+# dockerfile-utils: ignore
+ADD --unpack=true \
+    --checksum=${OPUS_CHECKSUM} \
+    https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opus-${OPUS_VERSION}.tar.gz \
+    /usr/local/src/
 WORKDIR /usr/local/src/opus-${OPUS_VERSION}
-RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-shared --enable-static --prefix=$(xx-info sysroot)usr/local \
+RUN CC=xx-clang ./configure \
+    --host=$(xx-clang --print-target-triple) \
+    --disable-shared \
+    --enable-static \
+    --prefix=$(xx-info sysroot)usr/local \
     && make -j$(nproc) \
     && make install
 
@@ -66,10 +76,14 @@ RUN CC=xx-clang ./configure --host=$(xx-clang --print-target-triple) --disable-s
 # Build FLAC statically from official tarball
 # ---------------------------
 WORKDIR /usr/local/src
+
 ENV FLAC_VERSION=1.5.0
-RUN curl -LO https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac-${FLAC_VERSION}.tar.xz \
-    && tar -xJf flac-${FLAC_VERSION}.tar.xz \
-    && rm flac-${FLAC_VERSION}.tar.xz
+ENV FLAC_CHECKSUM=sha256:f2c1c76592a82ffff8413ba3c4a1299b6c7ab06c734dee03fd88630485c2b920
+# dockerfile-utils: ignore
+ADD --unpack=true \
+    --checksum=${FLAC_CHECKSUM} \
+    https://github.com/xiph/flac/releases/download/${FLAC_VERSION}/flac-${FLAC_VERSION}.tar.xz \
+    /usr/local/src/
 
 WORKDIR /usr/local/src/flac-${FLAC_VERSION}
 RUN CC=xx-clang ./configure \
@@ -86,14 +100,17 @@ RUN CC=xx-clang ./configure \
 # Build FFmpeg statically with Opus and FLAC support
 # ---------------------------
 WORKDIR /usr/local/src
-ENV FFMPEG_VERSION=8.0.1
-RUN curl -LO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
-    && tar -xJf ffmpeg-${FFMPEG_VERSION}.tar.xz \
-    && rm ffmpeg-${FFMPEG_VERSION}.tar.xz
 
-WORKDIR /usr/local/src/ffmpeg-${FFMPEG_VERSION}
+ENV FFMPEG_VERSION=8.0.1
+ENV FFMPEG_CHECKSUM=sha256:05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41
+# dockerfile-utils: ignore
+ADD --unpack=true \
+    --checksum=${FFMPEG_CHECKSUM} \
+    https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
+    /usr/local/src/
 
 # Configure FFmpeg static build
+WORKDIR /usr/local/src/ffmpeg-${FFMPEG_VERSION}
 RUN xx-clang --setup-target-triple && \
     export PKG_CONFIG_PATH=$(xx-info sysroot)usr/local/lib/pkgconfig && \
     export PKG_CONFIG_LIBDIR=$(xx-info sysroot)usr/local/lib/pkgconfig && \
@@ -147,8 +164,7 @@ RUN xx-clang --setup-target-triple && \
     --disable-vaapi \
     --disable-vdpau \
     --enable-swresample \
-    --disable-swscale \
-    --disable-x86asm
+    --disable-swscale
 
 RUN make -j$(nproc) && make install && make clean
 
