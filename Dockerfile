@@ -101,8 +101,8 @@ RUN CC=xx-clang ./configure \
 # ---------------------------
 WORKDIR /usr/local/src
 
-ENV FFMPEG_VERSION=8.0.1
-ENV FFMPEG_CHECKSUM=sha256:05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41
+ENV FFMPEG_VERSION=8.1
+ENV FFMPEG_CHECKSUM=sha256:b072aed6871998cce9b36e7774033105ca29e33632be5b6347f3206898e0756a
 # dockerfile-utils: ignore
 ADD --unpack=true \
     --checksum=${FFMPEG_CHECKSUM} \
