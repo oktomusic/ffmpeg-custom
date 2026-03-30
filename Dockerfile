@@ -175,7 +175,7 @@ RUN xx-verify --static /usr/local/bin/metaflac
 # ---------------------------
 # Create minimal runtime image
 # ---------------------------
-FROM alpine:3.22 AS runtime
+FROM scratch AS runtime
 
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
