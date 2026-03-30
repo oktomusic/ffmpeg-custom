@@ -48,10 +48,28 @@ RUN xx-apk add --no-cache \
     musl-dev \
     gcc \
     g++ \
-    zlib-dev \
-    libogg-dev
+    zlib-dev
 
 WORKDIR /usr/local/src
+
+# ---------------------------
+# Build libogg from official tarball
+# ---------------------------
+ENV OGG_VERSION=1.3.6
+ENV OGG_CHECKSUM=sha256:83e6704730683d004d20e21b8f7f55dcb3383cdf84c0daedf30bde175f774638
+# dockerfile-utils: ignore
+ADD --unpack=true \
+    --checksum=${OGG_CHECKSUM} \
+    https://github.com/xiph/ogg/releases/download/v${OGG_VERSION}/libogg-${OGG_VERSION}.tar.gz \
+    /usr/local/src/
+WORKDIR /usr/local/src/libogg-${OGG_VERSION}
+RUN CC=xx-clang ./configure \
+    --host=$(xx-clang --print-target-triple) \
+    --disable-shared \
+    --enable-static \
+    --prefix=$(xx-info sysroot)usr/local \
+    && make -j$(nproc) \
+    && make install
 
 # ---------------------------
 # Build Opus statically from official tarball
