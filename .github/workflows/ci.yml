@@ -33,7 +33,7 @@ jobs:
       cache: ${{ github.event_name != 'workflow_dispatch' || inputs.use_cache }}
       sign: auto
       sbom: true
-      meta-images: ${{ github.repository }}
+      meta-images: ghcr.io/${{ github.repository }}
       meta-tags: |
         type=ref,event=branch
         type=ref,event=pr
