@@ -21,7 +21,7 @@ on:
 
 jobs:
   build:
-    name: Build multi-arch image
+    name: Docker
     uses: docker/github-builder/.github/workflows/build.yml@v1
     permissions:
       contents: read
