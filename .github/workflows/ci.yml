@@ -70,7 +70,7 @@ jobs:
           annotations: ${{ env.IMAGE_LABELS }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         id: build
         with:
           context: .
