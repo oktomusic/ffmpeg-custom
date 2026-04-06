@@ -25,7 +25,9 @@ jobs:
     uses: docker/github-builder/.github/workflows/build.yml@v1
     permissions:
       contents: read
+      packages: write
       id-token: write
+      attestations: write
     with:
       output: image
       platforms: linux/amd64,linux/arm64,linux/riscv64,linux/ppc64le,linux/s390x
