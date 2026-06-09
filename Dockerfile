@@ -10,7 +10,7 @@
 
 FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
 
-FROM --platform=$BUILDPLATFORM alpine:3.22 AS builder
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS builder
 
 LABEL org.opencontainers.image.title="Oktomusic Custom FFmpeg"
 LABEL org.opencontainers.image.description="Custom build of FFmpeg for Oktomusic project"
@@ -31,6 +31,7 @@ COPY --from=xx / /
 RUN apk add --no-cache \
     clang \
     lld \
+    llvm \
     llvm-dev \
     build-base \
     pkgconfig \
@@ -141,6 +142,10 @@ RUN xx-clang --setup-target-triple && \
     --target-os=linux \
     --cc=xx-clang \
     --cxx=xx-clang++ \
+    --ar=llvm-ar \
+    --ranlib=llvm-ranlib \
+    --nm=llvm-nm \
+    --strip=llvm-strip \
     --pkg-config-flags="--static" \
     --extra-cflags="-static" \
     --extra-ldflags="-static" \
