@@ -1,8 +1,6 @@
 ---
 name: CI
 
-permissions: {}
-
 on:
   push:
     branches:
@@ -18,15 +16,21 @@ on:
         type: boolean
         default: true
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Docker
-    uses: docker/github-builder/.github/workflows/build.yml@v1
+    uses: docker/github-builder/.github/workflows/build.yml@58cb9f5b71b1836d6f690c1e95effdeb9b98cb8a # v1.17.0
     permissions:
       contents: read
-      packages: write
-      id-token: write
-      attestations: write
+      packages: write # Publish to ghcr.io
+      id-token: write # Used to sign the image
+      attestations: write # Used to write attestations to the repository
     with:
       output: image
       platforms: linux/amd64,linux/arm64

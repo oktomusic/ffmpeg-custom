@@ -5,11 +5,21 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
   - package-ecosystem: "devcontainers"
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      "codeql-action":
+        patterns:
+          - "github/codeql-action*"

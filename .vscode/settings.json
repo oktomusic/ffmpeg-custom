@@ -1,12 +1,19 @@
 {
-    "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
     "editor.formatOnType": true,
+    "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "file",
+    "editor.detectIndentation": false,
+    "files.associations": {
+        "**/.github/workflows/*.{yml,yaml}": "github-actions-workflow"
+    },
     "[dockerfile]": {
         "editor.quickSuggestions": {
             "strings": true
         },
         "editor.defaultFormatter": "ms-azuretools.vscode-containers"
+    },
+    "[github-actions-workflow]": {
+        "editor.tabSize": 2
     }
 }
