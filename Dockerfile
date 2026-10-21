@@ -200,8 +200,6 @@ RUN xx-verify --static /usr/local/bin/metaflac
 # ---------------------------
 FROM scratch AS runtime
 
-COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
-COPY --from=builder /usr/local/bin/metaflac /usr/local/bin/metaflac
+COPY --from=builder --chmod=a=rx /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/metaflac /usr/local/bin/
 
 ENTRYPOINT ["/usr/local/bin/ffmpeg"]
