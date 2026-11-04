@@ -8,7 +8,7 @@
 # When updating tarball versions, update the checksums as well:
 # - curl -fsSL TARBALL_URL | sha256sum
 
-FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.10.0 AS xx
 
 FROM --platform=$BUILDPLATFORM alpine:3.24 AS builder
 
